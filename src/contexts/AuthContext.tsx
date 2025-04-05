@@ -1,8 +1,8 @@
+
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
-import { PostgrestError } from '@supabase/supabase-js';
 
 // Define interface for the profile data structure
 interface ProfileData {
@@ -45,31 +45,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const { toast } = useToast();
 
   // Helper function to fetch user profile safely
-  const fetchUserProfile = async (userId: string) => {
+  const fetchUserProfile = async (userId: string): Promise<User | null> => {
     try {
-      // Use .eq and .maybeSingle instead of .single to prevent errors when no profile is found
-      const { data: profile, error: profileError } = await supabase
+      console.log('Fetching profile for user:', userId);
+      
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle<ProfileData>();
-
-      if (profileError) {
-        console.error('Error fetching user profile:', profileError);
+        .maybeSingle();
+      
+      if (error) {
+        console.error('Error fetching profile:', error.message);
         return null;
       }
-
-      if (!profile) {
-        console.error('No profile found for user:', userId);
+      
+      if (!data) {
+        console.log('No profile found for user:', userId);
         return null;
       }
-
+      
+      console.log('Profile retrieved successfully:', data);
+      
       return {
-        id: profile.id,
-        username: profile.username,
-        role: profile.role as 'admin' | 'judge',
-        name: profile.name || undefined,
-        email: profile.email || undefined,
+        id: data.id,
+        username: data.username,
+        role: data.role as 'admin' | 'judge',
+        name: data.name || undefined,
+        email: data.email || undefined,
       };
     } catch (err) {
       console.error('Exception while fetching profile:', err);
@@ -79,62 +82,99 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Initialize auth state when the component mounts
   useEffect(() => {
+    let mounted = true;
+    
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // Use a synchronous update for the session change
+      (_event, session) => {
+        if (!mounted) return;
+        
         if (!session) {
           setUser(null);
           setIsLoading(false);
           return;
         }
         
-        // Set loading state
-        setIsLoading(true);
-        
-        // Use setTimeout to defer the profile fetch to avoid potential recursion
+        // Avoid synchronous profile fetching in auth callback
+        // Use setTimeout to defer it to the next tick
         setTimeout(async () => {
-          if (session?.user) {
-            const userProfile = await fetchUserProfile(session.user.id);
-            setUser(userProfile);
-          } else {
-            setUser(null);
+          if (!mounted) return;
+          
+          try {
+            if (session?.user) {
+              const profile = await fetchUserProfile(session.user.id);
+              if (mounted) {
+                setUser(profile);
+              }
+            } else {
+              if (mounted) {
+                setUser(null);
+              }
+            }
+          } catch (err) {
+            console.error('Error in deferred profile fetch:', err);
+          } finally {
+            if (mounted) {
+              setIsLoading(false);
+            }
           }
-          setIsLoading(false);
         }, 0);
       }
     );
 
     // Check for existing session
     const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session?.user) {
-        const userProfile = await fetchUserProfile(session.user.id);
-        setUser(userProfile);
+      try {
+        const { data } = await supabase.auth.getSession();
+        
+        if (data?.session?.user && mounted) {
+          // Defer profile fetching to avoid potential recursion
+          setTimeout(async () => {
+            if (!mounted) return;
+            
+            const profile = await fetchUserProfile(data.session.user.id);
+            if (mounted) {
+              setUser(profile);
+              setIsLoading(false);
+            }
+          }, 0);
+        } else {
+          if (mounted) {
+            setUser(null);
+            setIsLoading(false);
+          }
+        }
+      } catch (err) {
+        console.error('Error initializing auth:', err);
+        if (mounted) {
+          setUser(null);
+          setIsLoading(false);
+        }
       }
-      
-      setIsLoading(false);
     };
 
     initializeAuth();
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
 
-  const login = async (email: string, password: string, role: 'admin' | 'judge') => {
+  const login = async (email: string, password: string, role: 'admin' | 'judge'): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
     
     try {
+      console.log(`Attempting login for ${email} as ${role}`);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) {
+        console.error('Login error:', error.message);
         setError(error.message);
         toast({
           title: "Login Failed",
@@ -146,14 +186,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       if (data.user) {
-        // Check if user has the correct role using our helper function
+        console.log('User authenticated, checking profile and role');
+        
+        // Defer profile fetching to prevent recursion
         const userProfile = await fetchUserProfile(data.user.id);
         
         if (!userProfile) {
-          setError('Failed to fetch user profile');
+          const profileError = 'Failed to fetch user profile';
+          console.error(profileError);
+          setError(profileError);
           toast({
             title: "Login Failed",
-            description: 'Failed to fetch user profile',
+            description: profileError,
             variant: "destructive",
           });
           await supabase.auth.signOut();
@@ -162,10 +206,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
 
         if (userProfile.role !== role) {
-          setError(`Invalid role. You are not a ${role}.`);
+          const roleError = `Invalid role. You are not a ${role}.`;
+          console.error(roleError);
+          setError(roleError);
           toast({
             title: "Login Failed",
-            description: `Invalid role. You are not a ${role}.`,
+            description: roleError,
             variant: "destructive",
           });
           await supabase.auth.signOut();
@@ -173,6 +219,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return false;
         }
 
+        console.log('Login successful as', role);
         setIsLoading(false);
         toast({
           title: "Success",
@@ -185,6 +232,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return false;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred during login';
+      console.error('Exception during login:', errorMessage);
       setError(errorMessage);
       toast({
         title: "Login Failed",
@@ -196,11 +244,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const signUp = async (email: string, password: string, username: string, role: 'admin' | 'judge') => {
+  const signUp = async (email: string, password: string, username: string, role: 'admin' | 'judge'): Promise<boolean> => {
     setIsLoading(true);
     setError(null);
     
     try {
+      console.log(`Attempting to sign up ${email} as ${role}`);
+      
       // Register user with Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -214,6 +264,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       });
 
       if (error) {
+        console.error('Sign up error:', error.message);
         setError(error.message);
         toast({
           title: "Sign Up Failed",
@@ -224,6 +275,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         return false;
       }
 
+      console.log('Sign up successful');
       toast({
         title: "Success",
         description: "Account created successfully. You can now log in.",
@@ -233,6 +285,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred during sign up';
+      console.error('Exception during sign up:', errorMessage);
       setError(errorMessage);
       toast({
         title: "Sign Up Failed",
@@ -245,6 +298,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
+    console.log('Logging out user');
     await supabase.auth.signOut();
     setUser(null);
     toast({
