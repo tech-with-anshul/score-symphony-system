@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,39 +44,64 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Helper function to fetch user profile safely
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      // Use .eq and .maybeSingle instead of .single to prevent errors when no profile is found
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle<ProfileData>();
+
+      if (profileError) {
+        console.error('Error fetching user profile:', profileError);
+        return null;
+      }
+
+      if (!profile) {
+        console.error('No profile found for user:', userId);
+        return null;
+      }
+
+      return {
+        id: profile.id,
+        username: profile.username,
+        role: profile.role as 'admin' | 'judge',
+        name: profile.name || undefined,
+        email: profile.email || undefined,
+      };
+    } catch (err) {
+      console.error('Exception while fetching profile:', err);
+      return null;
+    }
+  };
+
   // Initialize auth state when the component mounts
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setIsLoading(true);
-        
-        if (session?.user) {
-          // Fetch the user profile from our profiles table
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single<ProfileData>();
-
-          if (profileError) {
-            console.error('Error fetching user profile:', profileError);
-            setUser(null);
-          } else if (profile) {
-            // Convert Supabase user to our app's User type
-            setUser({
-              id: profile.id,
-              username: profile.username,
-              role: profile.role as 'admin' | 'judge',
-              name: profile.name || undefined,
-              email: profile.email || undefined,
-            });
-          }
-        } else {
+      (event, session) => {
+        // Use a synchronous update for the session change
+        if (!session) {
           setUser(null);
+          setIsLoading(false);
+          return;
         }
         
-        setIsLoading(false);
+        // Set loading state
+        setIsLoading(true);
+        
+        // Use setTimeout to defer the profile fetch to avoid potential recursion
+        setTimeout(async () => {
+          if (session?.user) {
+            const userProfile = await fetchUserProfile(session.user.id);
+            setUser(userProfile);
+          } else {
+            setUser(null);
+          }
+          setIsLoading(false);
+        }, 0);
       }
     );
 
@@ -86,26 +110,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        // Fetch the user profile from our profiles table
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single<ProfileData>();
-
-        if (profileError) {
-          console.error('Error fetching user profile:', profileError);
-          setUser(null);
-        } else if (profile) {
-          // Convert Supabase user to our app's User type
-          setUser({
-            id: profile.id,
-            username: profile.username,
-            role: profile.role as 'admin' | 'judge',
-            name: profile.name || undefined,
-            email: profile.email || undefined,
-          });
-        }
+        const userProfile = await fetchUserProfile(session.user.id);
+        setUser(userProfile);
       }
       
       setIsLoading(false);
@@ -140,14 +146,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
 
       if (data.user) {
-        // Check if user has the correct role
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single<ProfileData>();
-
-        if (profileError || !profile) {
+        // Check if user has the correct role using our helper function
+        const userProfile = await fetchUserProfile(data.user.id);
+        
+        if (!userProfile) {
           setError('Failed to fetch user profile');
           toast({
             title: "Login Failed",
@@ -159,7 +161,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return false;
         }
 
-        if (profile.role !== role) {
+        if (userProfile.role !== role) {
           setError(`Invalid role. You are not a ${role}.`);
           toast({
             title: "Login Failed",
