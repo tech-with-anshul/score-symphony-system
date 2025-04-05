@@ -30,7 +30,7 @@ const Index = () => {
               LAKSHAGRIHA HACKATHON 4.0
             </h1>
             <p className="text-xl text-hackathon-foreground/80 max-w-xl">
-              Streamline your hackathon judging process with our comprehensive evaluation platform designed for organizers and judges.
+             🔥 Dev Bhoomi Uttarakhand University (DBUU) presents its biggest International Hackathon organized by the Department of Computer Science & Engineering (SoEC)!
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
