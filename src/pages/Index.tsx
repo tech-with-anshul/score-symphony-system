@@ -2,8 +2,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Trophy, Users, UserCheck, TrendingUp } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import LoginForm from '@/components/auth/LoginForm';
+import { useAuth } from '@/contexts/SimpleAuthContext';
+import SimpleLoginForm from '@/components/auth/SimpleLoginForm';
 
 const Index = () => {
   const { isAuthenticated, user } = useAuth();
@@ -77,7 +77,7 @@ const Index = () => {
           </div>
           
           <div className="flex-1 max-w-md w-full">
-            <LoginForm />
+            <SimpleLoginForm />
           </div>
         </div>
       </div>
