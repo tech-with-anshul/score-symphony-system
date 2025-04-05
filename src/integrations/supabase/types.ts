@@ -9,7 +9,155 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      evaluations: {
+        Row: {
+          comments: string | null
+          completion: number
+          design: number
+          id: string
+          innovation: number
+          judge_id: string
+          presentation: number
+          submitted_at: string
+          team_id: string
+          tech_complexity: number
+          total_score: number | null
+        }
+        Insert: {
+          comments?: string | null
+          completion: number
+          design: number
+          id?: string
+          innovation: number
+          judge_id: string
+          presentation: number
+          submitted_at?: string
+          team_id: string
+          tech_complexity: number
+          total_score?: number | null
+        }
+        Update: {
+          comments?: string | null
+          completion?: number
+          design?: number
+          id?: string
+          innovation?: number
+          judge_id?: string
+          presentation?: number
+          submitted_at?: string
+          team_id?: string
+          tech_complexity?: number
+          total_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evaluations_judge_id_fkey"
+            columns: ["judge_id"]
+            isOneToOne: false
+            referencedRelation: "judges"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "evaluations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      judges: {
+        Row: {
+          assigned_teams: string[] | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          user_id: string | null
+        }
+        Insert: {
+          assigned_teams?: string[] | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          user_id?: string | null
+        }
+        Update: {
+          assigned_teams?: string[] | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "judges_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string | null
+          role: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          name?: string | null
+          role: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string | null
+          role?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      teams: {
+        Row: {
+          created_at: string
+          id: string
+          members: string[]
+          name: string
+          project_description: string | null
+          project_name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          members: string[]
+          name: string
+          project_description?: string | null
+          project_name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          members?: string[]
+          name?: string
+          project_description?: string | null
+          project_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

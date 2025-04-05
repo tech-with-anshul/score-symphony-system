@@ -1,14 +1,17 @@
 
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { User } from '@/types';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/components/ui/use-toast';
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string, role: 'admin' | 'judge') => Promise<boolean>;
+  login: (email: string, password: string, role: 'admin' | 'judge') => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  signUp: (email: string, password: string, username: string, role: 'admin' | 'judge') => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,85 +28,216 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
-// Mock users (in a real app this would be from a backend)
-const mockUsers = [
-  {
-    id: '1',
-    username: 'admin',
-    password: 'admin123',
-    role: 'admin',
-    name: 'Admin User',
-    email: 'admin@example.com',
-  },
-  {
-    id: '2',
-    username: 'judge1',
-    password: 'judge123',
-    role: 'judge',
-    name: 'Judge One',
-    email: 'judge1@example.com',
-  },
-  {
-    id: '3',
-    username: 'judge2',
-    password: 'judge123',
-    role: 'judge',
-    name: 'Judge Two',
-    email: 'judge2@example.com',
-  },
-];
-
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
+  // Initialize auth state when the component mounts
   useEffect(() => {
-    // Check for saved user in localStorage
-    const savedUser = localStorage.getItem('hackathon_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        localStorage.removeItem('hackathon_user');
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setIsLoading(true);
+        
+        if (session?.user) {
+          // Fetch the user profile from our profiles table
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+
+          if (profileError) {
+            console.error('Error fetching user profile:', profileError);
+            setUser(null);
+          } else if (profile) {
+            // Convert Supabase user to our app's User type
+            setUser({
+              id: profile.id,
+              username: profile.username,
+              role: profile.role as 'admin' | 'judge',
+              name: profile.name || undefined,
+              email: profile.email || undefined,
+            });
+          }
+        } else {
+          setUser(null);
+        }
+        
+        setIsLoading(false);
       }
-    }
-    setIsLoading(false);
+    );
+
+    // Check for existing session
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Fetch the user profile from our profiles table
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileError) {
+          console.error('Error fetching user profile:', profileError);
+          setUser(null);
+        } else if (profile) {
+          // Convert Supabase user to our app's User type
+          setUser({
+            id: profile.id,
+            username: profile.username,
+            role: profile.role as 'admin' | 'judge',
+            name: profile.name || undefined,
+            email: profile.email || undefined,
+          });
+        }
+      }
+      
+      setIsLoading(false);
+    };
+
+    initializeAuth();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (username: string, password: string, role: 'admin' | 'judge') => {
+  const login = async (email: string, password: string, role: 'admin' | 'judge') => {
     setIsLoading(true);
     setError(null);
     
     try {
-      // Simulate API call with delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Find user with matching credentials
-      const foundUser = mockUsers.find(
-        u => u.username === username && u.password === password && u.role === role
-      );
-      
-      if (foundUser) {
-        // Create user object without password
-        const { password: _, ...userWithoutPassword } = foundUser;
-        setUser(userWithoutPassword as User);
-        localStorage.setItem('hackathon_user', JSON.stringify(userWithoutPassword));
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        setError(error.message);
+        toast({
+          title: "Login Failed",
+          description: error.message,
+          variant: "destructive",
+        });
         setIsLoading(false);
-        return true;
-      } else {
-        throw new Error('Invalid credentials');
+        return false;
       }
+
+      if (data.user) {
+        // Check if user has the correct role
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError || !profile) {
+          setError('Failed to fetch user profile');
+          toast({
+            title: "Login Failed",
+            description: 'Failed to fetch user profile',
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          setIsLoading(false);
+          return false;
+        }
+
+        if (profile.role !== role) {
+          setError(`Invalid role. You are not a ${role}.`);
+          toast({
+            title: "Login Failed",
+            description: `Invalid role. You are not a ${role}.`,
+            variant: "destructive",
+          });
+          await supabase.auth.signOut();
+          setIsLoading(false);
+          return false;
+        }
+
+        setIsLoading(false);
+        toast({
+          title: "Success",
+          description: `Logged in as ${role}`,
+        });
+        return true;
+      }
+
+      setIsLoading(false);
+      return false;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during login');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during login';
+      setError(errorMessage);
+      toast({
+        title: "Login Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
       setIsLoading(false);
       return false;
     }
   };
 
-  const logout = () => {
+  const signUp = async (email: string, password: string, username: string, role: 'admin' | 'judge') => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Register user with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username,
+            role,
+          },
+        },
+      });
+
+      if (error) {
+        setError(error.message);
+        toast({
+          title: "Sign Up Failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return false;
+      }
+
+      toast({
+        title: "Success",
+        description: "Account created successfully. You can now log in.",
+      });
+      
+      setIsLoading(false);
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during sign up';
+      setError(errorMessage);
+      toast({
+        title: "Sign Up Failed",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem('hackathon_user');
+    toast({
+      title: "Logged Out",
+      description: "You have been successfully logged out",
+    });
   };
 
   const isAuthenticated = user !== null;
@@ -117,6 +251,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         isAuthenticated,
         isLoading,
         error,
+        signUp,
       }}
     >
       {children}
