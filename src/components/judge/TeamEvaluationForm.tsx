@@ -162,11 +162,16 @@ const TeamEvaluationForm = ({ team }: TeamEvaluationFormProps) => {
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4 space-y-6">
                 {criteria.map((criterion) => {
-                  const key = criterion.name.toLowerCase().replace(/ /g, '') as keyof typeof scores;
-                  const mappedKey = key === 'innovation' ? 'innovation' :
-                                   key === 'technicalcomplexity' ? 'techComplexity' :
-                                   key === 'design' ? 'design' :
-                                   key === 'completion' ? 'completion' : 'presentation';
+                  // Create a mapping function to convert from criterion name to the correct key in scores
+                  const getScoreKey = (name: string): keyof typeof scores => {
+                    if (name.toLowerCase() === 'innovation') return 'innovation';
+                    if (name.toLowerCase() === 'technical complexity') return 'techComplexity';
+                    if (name.toLowerCase() === 'design') return 'design';
+                    if (name.toLowerCase() === 'completion') return 'completion';
+                    return 'presentation';
+                  };
+                  
+                  const mappedKey = getScoreKey(criterion.name);
                   
                   return (
                     <div key={criterion.id} className="space-y-2">

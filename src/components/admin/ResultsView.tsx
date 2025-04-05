@@ -189,17 +189,17 @@ const ResultsView = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {team.evaluations?.map(eval => {
-                          const judge = judges.find(j => j.id === eval.judgeId);
+                        {team.evaluations?.map(evaluation => {
+                          const judge = judges.find(j => j.id === evaluation.judgeId);
                           return (
-                            <TableRow key={eval.id}>
+                            <TableRow key={evaluation.id}>
                               <TableCell>{judge?.name || 'Unknown Judge'}</TableCell>
-                              <TableCell className="text-center">{eval.scores.innovation}</TableCell>
-                              <TableCell className="text-center">{eval.scores.techComplexity}</TableCell>
-                              <TableCell className="text-center">{eval.scores.design}</TableCell>
-                              <TableCell className="text-center">{eval.scores.completion}</TableCell>
-                              <TableCell className="text-center">{eval.scores.presentation}</TableCell>
-                              <TableCell className="text-right font-medium">{eval.totalScore}</TableCell>
+                              <TableCell className="text-center">{evaluation.scores.innovation}</TableCell>
+                              <TableCell className="text-center">{evaluation.scores.techComplexity}</TableCell>
+                              <TableCell className="text-center">{evaluation.scores.design}</TableCell>
+                              <TableCell className="text-center">{evaluation.scores.completion}</TableCell>
+                              <TableCell className="text-center">{evaluation.scores.presentation}</TableCell>
+                              <TableCell className="text-right font-medium">{evaluation.totalScore}</TableCell>
                             </TableRow>
                           );
                         })}
