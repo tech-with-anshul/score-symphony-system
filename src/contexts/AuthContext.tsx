@@ -3,6 +3,17 @@ import React, { createContext, useState, useContext, useEffect, ReactNode } from
 import { User } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
+import { PostgrestError } from '@supabase/supabase-js';
+
+// Define interface for the profile data structure
+interface ProfileData {
+  id: string;
+  username: string;
+  role: 'admin' | 'judge';
+  name?: string | null;
+  email?: string | null;
+  created_at?: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -47,7 +58,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
-            .single();
+            .single<ProfileData>();
 
           if (profileError) {
             console.error('Error fetching user profile:', profileError);
@@ -80,7 +91,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .single<ProfileData>();
 
         if (profileError) {
           console.error('Error fetching user profile:', profileError);
@@ -134,7 +145,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           .from('profiles')
           .select('role')
           .eq('id', data.user.id)
-          .single();
+          .single<ProfileData>();
 
         if (profileError || !profile) {
           setError('Failed to fetch user profile');
