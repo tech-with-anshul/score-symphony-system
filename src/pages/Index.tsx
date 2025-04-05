@@ -27,7 +27,7 @@ const Index = () => {
         <div className="flex flex-col md:flex-row gap-12 items-center">
           <div className="flex-1 space-y-6">
             <h1 className="text-4xl md:text-5xl font-bold tracking-tight gradient-bg text-transparent bg-clip-text">
-              Hackathon Evaluation System
+              LAKSHAGRIHA HACKATHON 4.0
             </h1>
             <p className="text-xl text-hackathon-foreground/80 max-w-xl">
               Streamline your hackathon judging process with our comprehensive evaluation platform designed for organizers and judges.
